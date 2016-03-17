@@ -2,7 +2,7 @@
 
 #include "TFragmentQueue.h"
 #include "TOldFragment.h"
-#include "TNewFragment.h"
+#include "TFragment.h"
 
 #include "TGRSIOptions.h"
 #include "TGRSIRunInfo.h"
@@ -47,9 +47,9 @@ void TGRSIRootIO::SetUpFragmentTree() {
 	fFragmentTree = new TTree("FragmentTree","FragmentTree");
 	fBufferFrag = NULL;
 	if(TGRSIRunInfo::Get()->OldFragments()) {
-     fFragmentTree->Bronch("TFragment","TOldFragment",&fBufferFrag,128000,99);
+     fFragmentTree->Bronch("TVirtualFragment","TOldFragment",&fBufferFrag,128000,99);
 	} else {
-	  fFragmentTree->Bronch("TFragment","TNewFragment",&fBufferFrag,128000,99);
+	  fFragmentTree->Bronch("TVirtualFragment","TFragment",&fBufferFrag,128000,99);
 	}
 	if(TGRSIRunInfo::Get()->Descant()) {
 	  fFragmentTree->Branch("DescantData", &fDescantData, "Zc/I:CcShort/I:ccLong/I", 128000);
@@ -68,9 +68,9 @@ void TGRSIRootIO::SetUpBadFragmentTree() {
 	fBadFragmentTree = new TTree("BadFragmentTree","BadFragmentTree");
 	fBadBufferFrag = 0;
 	if(TGRSIRunInfo::Get()->OldFragments()) {
- 	  fBadFragmentTree->Bronch("TFragment","TOldFragment",&fBadBufferFrag,128000,99);
+ 	  fBadFragmentTree->Bronch("TVirtualFragment","TOldFragment",&fBadBufferFrag,128000,99);
 	} else {
-	  fBadFragmentTree->Bronch("TFragment","TNewFragment",&fBadBufferFrag,128000,99);
+	  fBadFragmentTree->Bronch("TVirtualFragment","TFragment",&fBadBufferFrag,128000,99);
 	}
 	printf("BadFragmentTree set up.\n");
 }
@@ -145,14 +145,14 @@ TDiagnostics* TGRSIRootIO::GetDiagnostics(){
 	return fDiagnostics;
 }
 
-void TGRSIRootIO::FillFragmentTree(TFragment* frag) {
+void TGRSIRootIO::FillFragmentTree(TVirtualFragment* frag) {
 	// if(!fFragmentTree)
 	//    return;
-	//the (double) casting is necessary so that the copy constructor of the "real" class is being used, not the virtual one of TFragment
+	//the (double) casting is necessary so that the copy constructor of the "real" class is being used, not the virtual one of TVirtualFragment
 	if(TGRSIRunInfo::Get()->OldFragments()) {
       *static_cast<TOldFragment*>(fBufferFrag) = *static_cast<TOldFragment*>(frag);
    } else {
-      *static_cast<TNewFragment*>(fBufferFrag) = *static_cast<TNewFragment*>(frag);
+      *static_cast<TFragment*>(fBufferFrag) = *static_cast<TFragment*>(frag);
    }
 	if(TGRSIRunInfo::Get()->Descant()) {
 	  fDescantData[0] = frag->GetZc();
@@ -166,7 +166,7 @@ void TGRSIRootIO::FillFragmentTree(TFragment* frag) {
 	fTimesFillCalled++;
 }
 
-void TGRSIRootIO::FillBadFragmentTree(TFragment* frag) {
+void TGRSIRootIO::FillBadFragmentTree(TVirtualFragment* frag) {
 	if(!TGRSIOptions::WriteBadFrags())
 		return;
 	*fBadBufferFrag = *frag;
@@ -332,9 +332,9 @@ void TGRSIRootIO::CloseRootOutFile()   {
 	if(TGRSIRunInfo::GetNumberOfSystems()>0) {
 		printf(DMAGENTA " Writing RunInfo with " DYELLOW "%i " DMAGENTA " systems to file." RESET_COLOR "\n",TGRSIRunInfo::GetNumberOfSystems());
 		//get run start and stop (in seconds) from the fragment tree
-		TGRSIRunInfo::Get()->SetRunStart(fFragmentTree->GetMinimum("MidasTimeStamp"));
-		TGRSIRunInfo::Get()->SetRunStop( fFragmentTree->GetMaximum("MidasTimeStamp"));
-		TGRSIRunInfo::Get()->SetRunLength(fFragmentTree->GetMaximum("MidasTimeStamp") - fFragmentTree->GetMinimum("MidasTimeStamp"));
+		TGRSIRunInfo::Get()->SetRunStart(fFragmentTree->GetMinimum("fMidasTimeStamp"));
+		TGRSIRunInfo::Get()->SetRunStop( fFragmentTree->GetMaximum("fMidasTimeStamp"));
+		TGRSIRunInfo::Get()->SetRunLength(fFragmentTree->GetMaximum("fMidasTimeStamp") - fFragmentTree->GetMinimum("fMidasTimeStamp"));
 		printf("set run start to %.0f, and stop to %.0f (run length %.0f)\n",TGRSIRunInfo::Get()->RunStart(),TGRSIRunInfo::Get()->RunStop(),TGRSIRunInfo::Get()->RunLength());
 		TGRSIRunInfo::Get()->Write();
 	}

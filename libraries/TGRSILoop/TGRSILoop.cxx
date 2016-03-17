@@ -120,7 +120,7 @@ bool TGRSILoop::SortMidas() {
 void TGRSILoop::FillFragmentTree(TMidasFile* midasfile) {
    fFragsSentToTree = 0;
    fBadFragsSentToTree = 0;
-   TFragment* frag = 0;
+   TVirtualFragment* frag = 0;
    while(TFragmentQueue::GetQueue()->FragsInQueue() !=0      || 
          TFragmentQueue::GetQueue("BAD")->FragsInQueue() !=0 ||
          fMidasThreadRunning) {
@@ -512,6 +512,8 @@ bool TGRSILoop::ProcessMidasEvent(TMidasEvent* mEvent, TMidasFile* mFile)   {
                if(!ProcessGRIFFIN((uint32_t*)ptr, banksize, 1, mEvent, mFile)) {}
             } else if((banksize = mEvent->LocateBank(NULL,"GRF2",&ptr))>0) {
                if(!ProcessGRIFFIN((uint32_t*)ptr, banksize, 2, mEvent, mFile)) {}
+            } else if((banksize = mEvent->LocateBank(NULL,"GRF3",&ptr))>0) {
+               if(!ProcessGRIFFIN((uint32_t*)ptr, banksize, 3, mEvent, mFile)) {}
             } else if( (banksize = mEvent->LocateBank(NULL,"FME0",&ptr))>0) {
                if(!Process8PI(0,(uint32_t*)ptr, banksize, mEvent, mFile)) {}
             } else if( (banksize = mEvent->LocateBank(NULL,"FME1",&ptr))>0) {
@@ -538,7 +540,6 @@ bool TGRSILoop::ProcessMidasEvent(TMidasEvent* mEvent, TMidasFile* mFile)   {
    }
    catch(const std::bad_alloc&) {   }
    return true;
-
 }
 
 void TGRSILoop::Initialize() {   }
