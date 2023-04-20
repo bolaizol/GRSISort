@@ -881,7 +881,7 @@ void TChannel::WriteCalFile(const std::string& outfilename)
 	/// prints the context of addresschannelmap formatted correctly to stdout if
 	/// no file name is passed to the function.  If a file name is passed to the function
 	/// prints the context of addresschannelmap formatted correctly to a file with the given
-	/// name.  This will earse and rewrite the file if the file already exisits!
+	/// name.  This will erase and rewrite the file if the file already exisits!
 
 	std::vector<TChannel*> chanVec = SortedChannels();
 
