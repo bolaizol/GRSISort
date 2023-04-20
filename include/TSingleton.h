@@ -17,8 +17,6 @@
 
 ///////////////////////////////////////////////////////////////
 ///
-/// \class TSingleton<T>
-///
 /// This class is intended as a base class for singletons,
 /// especially those that are written to file.
 /// The Get() function is written such that it reads the class
@@ -33,7 +31,7 @@ template <class T>
 class TSingleton : public TObject
 {
 public:
-	static T* Get()
+	static T* Get(bool verbose = false)
 	{
 		// if we don't have an instance yet or changed into another directory
 		// we want to read from the current directory
@@ -41,7 +39,7 @@ public:
 			if((gDirectory->GetFile()) != nullptr) {
 				TList* list = gDirectory->GetFile()->GetListOfKeys();
 				TIter  iter(list);
-				std::cout<<"Reading "<<T::Class()->GetName()<<R"( from file ")"<<CYAN<<gDirectory->GetFile()->GetName()<<RESET_COLOR<<R"(")"<<std::endl;
+				if(verbose) std::cout<<"Reading "<<T::Class()->GetName()<<R"( from file ")"<<CYAN<<gDirectory->GetFile()->GetName()<<RESET_COLOR<<R"(")"<<std::endl;
 				while(TKey* key = static_cast<TKey*>(iter.Next())) {
 					if(strcmp(key->GetClassName(), T::Class()->GetName()) != 0) {
 						continue;
@@ -50,6 +48,7 @@ public:
 					// this automatically deletes the old singleton if we just switched files
 					Set(static_cast<T*>(key->ReadObj()));
 					fDir = gDirectory; // in either case (read from file or created new), gDirectory is the current directory
+					break; // we will find the newest key first, so we want to break here and not try and read other instaces of the same class
 				}
 			}
 			if(fSingleton == nullptr) {
@@ -59,6 +58,7 @@ public:
 		}
 		return fSingleton;
 	}
+
 	static T* GetAll()
 	{
 		// get the singleton itself
@@ -108,6 +108,14 @@ public:
 					std::cout<<"Found previous "<<fSingleton->GetName()<<" data from "<<prevSubRun->GetName()<<std::endl;
 				} else {
 					std::cout<<"Failed to find previous "<<fSingleton->GetName()<<" data from "<<prevSubRun->GetName()<<std::endl;
+					// try to find object without leading T
+					prevSingleton = static_cast<T*>(prevSubRun->Get(&(fSingleton->GetName()[1])));
+					if(prevSingleton != nullptr) {
+						fSingleton->Add(prevSingleton);
+						std::cout<<"Found previous "<<&(fSingleton->GetName()[1])<<" data from "<<prevSubRun->GetName()<<std::endl;
+					} else {
+						std::cout<<"Failed to find previous "<<&(fSingleton->GetName()[1])<<" data from "<<prevSubRun->GetName()<<std::endl;
+					}
 				}
 				prevSubRun->Close();
 				fDir->cd();
@@ -117,6 +125,7 @@ public:
 		}
 		return fSingleton;
 	}
+
 	static void Set(T* val)
 	{
 		if(fSingleton != val) {
@@ -124,6 +133,37 @@ public:
 			fSingleton = val;
 		}
 	}
+
+	static T* AddCurrent()
+	{
+		// if we don't have an instance yet, we just use Get
+		if(fSingleton == nullptr) {
+			return Get();
+		}
+		// if we do have an instance and changed into another directory
+		// we want to add the object read from the current directory
+		if(fSingleton != nullptr && fDir != gDirectory) {
+			if((gDirectory->GetFile()) != nullptr) {
+				TList* list = gDirectory->GetFile()->GetListOfKeys();
+				TIter  iter(list);
+				std::cout<<R"(Reading from file ")"<<CYAN<<gDirectory->GetFile()->GetName()<<RESET_COLOR<<R"(": )"<<std::flush;
+				while(TKey* key = static_cast<TKey*>(iter.Next())) {
+					if(strcmp(key->GetClassName(), T::Class()->GetName()) != 0) {
+						continue;
+					}
+					// we found the object in the file, so we use it as our singleton
+					// this automatically deletes the old singleton if we just switched files
+					std::cout<<"adding "<<T::Class()->GetName()<<" "<<std::flush;
+					T* tmpSingleton = static_cast<T*>(key->ReadObj());
+					fSingleton->Add(tmpSingleton);
+					fDir = gDirectory; // update the directory to gDirectory so we don't read from this file again
+				}
+				std::cout<<std::endl;
+			}
+		}
+		return fSingleton;
+	}
+
 	static void PrintDirectory()
 	{
 		std::cout<<"Read singleton "<<fSingleton<<" from "<<(fDir!=nullptr?fDir->GetName():"N/A")<<std::endl;
@@ -145,7 +185,9 @@ private:
 	/// \endcond
 };
 
+/// \cond CLASSIMP
 templateClassImp(TSingleton)
+/// \endcond
 
 template<class T>
 T* TSingleton<T>::fSingleton = nullptr;

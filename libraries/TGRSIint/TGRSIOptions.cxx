@@ -6,8 +6,10 @@
 
 #include "TEnv.h"
 #include "TKey.h"
+#include "TSystem.h"
 
 #include "Globals.h"
+#include "FullPath.h"
 #include "ArgParser.h"
 #include "DynamicLibrary.h"
 #include "TGRSIUtilities.h"
@@ -37,16 +39,15 @@ TGRSIOptions::TGRSIOptions(int argc, char** argv) : fShouldExit(false)
 void TGRSIOptions::Clear(Option_t*)
 {
    /// Clears all of the variables in the TGRSIOptions
-   fInputMidasFiles.clear();
-   fInputLstFiles.clear();
-   fInputTdrFiles.clear();
+   fInputFiles.clear();
    fInputRootFiles.clear();
    fInputCalFiles.clear();
    fInputOdbFiles.clear();
    fExternalRunInfo.clear();
    fMacroFiles.clear();
+	fDataFrameLibrary = "";
 
-   fInputCutsFiles.clear();
+   fInputCutFiles.clear();
    fInputValFiles.clear();
    fInputWinFiles.clear();
    fInputRing = "";
@@ -70,12 +71,14 @@ void TGRSIOptions::Clear(Option_t*)
    fUseMidFileOdb  = false;
 
    fMakeAnalysisTree = false;
-   fProgressDialog   = false;
    fReadingMaterial  = false;
    fIgnoreFileOdb    = false;
+   fIgnoreOdbChannels= false;
+	fDownscaling      = 1;
 
    fIgnoreScaler     = false;
    fIgnoreEpics      = false;
+   fWriteFragmentTree= false;
    fWriteBadFrags    = false;
    fWriteDiagnostics = false;
 	fWordOffset       = 1;
@@ -97,7 +100,10 @@ void TGRSIOptions::Clear(Option_t*)
 
 	fNumberOfClients = 2;
 
-   fTimeSortInput = false;
+	fNumberOfEvents = 0;
+
+   fIgnoreMissingChannel = false;
+   fSkipInputSort = false;
 
    fSeparateOutOfOrder    = false;
 
@@ -113,8 +119,16 @@ void TGRSIOptions::Clear(Option_t*)
    // Proof only
    fMaxWorkers   = -1;
    fSelectorOnly = false;
+	fTreeName.clear();
+   fAverageRateEstimation = false;
+   fParallelUnzip = false;
+   fCacheSize = -1;
+   fSubmergers = -1;
+   fProofStats = false;
 
    fHelp          = false;
+
+	fParserLibrary.clear();
 }
 
 void TGRSIOptions::Print(Option_t*) const
@@ -127,13 +141,14 @@ void TGRSIOptions::Print(Option_t*) const
             <<"fReconstructTimeStamp: "<<fReconstructTimeStamp<<std::endl
             <<std::endl
             <<"fMakeAnalysisTree: "<<fMakeAnalysisTree<<std::endl
-            <<"fProgressDialog: "<<fProgressDialog<<std::endl
             <<"fReadingMaterial;: "<<fReadingMaterial<<std::endl
             <<"fIgnoreFileOdb: "<<fIgnoreFileOdb<<std::endl
-            <<"fRecordDialog: "<<fRecordDialog<<std::endl
+            <<"fIgnoreOdbChannels: "<<fIgnoreOdbChannels<<std::endl
+            <<"fDownscaling: "<<fDownscaling<<std::endl
             <<std::endl
             <<"fIgnoreScaler: "<<fIgnoreScaler<<std::endl
             <<"fIgnoreEpics: "<<fIgnoreEpics<<std::endl
+            <<"fWriteFragmentTree: "<<fWriteFragmentTree<<std::endl
             <<"fWriteBadFrags: "<<fWriteBadFrags<<std::endl
             <<"fWriteDiagnostics: "<<fWriteDiagnostics<<std::endl
             <<"fWordOffset: "<<fWordOffset<<std::endl
@@ -154,7 +169,8 @@ void TGRSIOptions::Print(Option_t*) const
             <<"fFragmentWriteQueueSize: "<<fFragmentWriteQueueSize<<std::endl
             <<"fAnalysisWriteQueueSize: "<<fAnalysisWriteQueueSize<<std::endl
             <<std::endl
-            <<"fTimeSortInput: "<<fTimeSortInput<<std::endl
+            <<"fIgnoreMissingChannel: "<<fIgnoreMissingChannel<<std::endl
+            <<"fSkipInputSort: "<<fSkipInputSort<<std::endl
             <<"fSortDepth: "<<fSortDepth<<std::endl
             <<std::endl
             <<"fSeparateOutOfOrder: "<<fSeparateOutOfOrder<<std::endl
@@ -168,8 +184,16 @@ void TGRSIOptions::Print(Option_t*) const
 				<<std::endl
             <<"fMaxWorkers: "<<fMaxWorkers<<std::endl
             <<"fSelectorOnly: "<<fSelectorOnly<<std::endl
+				<<"fTreeName: "<<fTreeName<<std::endl
+				<<"fAverageRateEstimation: "<<fAverageRateEstimation<<std::endl
+   			<<"fParallelUnzip: "<<fParallelUnzip<<std::endl
+   			<<"fCacheSize: "<<fCacheSize<<std::endl
+   			<<"fSubmergers: "<<fSubmergers<<std::endl
+   			<<"fProofStats: "<<fProofStats<<std::endl
 				<<std::endl
-				<<"fHelp: "<<fHelp<<std::endl;
+				<<"fHelp: "<<fHelp<<std::endl
+				<<std::endl
+				<<"fParserLibrary: "<<fParserLibrary<<std::endl;
 
 				fAnalysisOptions->Print();
 }
@@ -181,6 +205,8 @@ void TGRSIOptions::Load(int argc, char** argv)
    Clear();
    fFragmentHistogramLib = gEnv->GetValue("GRSI.FragmentHistLib", "");
    fAnalysisHistogramLib = gEnv->GetValue("GRSI.AnalysisHistLib", "");
+
+	fParserLibrary = gEnv->GetValue("GRSI.ParserLibrary","");
 
    // Load default TChannels, if specified.
    {
@@ -224,6 +250,8 @@ void TGRSIOptions::Load(int argc, char** argv)
 	// analysis options, these options are to be parsed on the second pass, so firstPass is set to false
 	parser.option("build-window", &fAnalysisOptions->fBuildWindow, false)
 		.description("Build window, timestamp units").colour(DCYAN);
+	parser.option("build-events-by-timestamp", &fAnalysisOptions->fBuildEventsByTimeStamp, false)
+		.description("Build events by timestamp w/o using CFD").colour(DCYAN);
 	parser.option("addback-window", &fAnalysisOptions->fAddbackWindow, false)
 		.description("Addback window, time in ns").colour(DCYAN);
 	parser.option("suppression-window", &fAnalysisOptions->fSuppressionWindow, false)
@@ -235,7 +263,7 @@ void TGRSIOptions::Load(int argc, char** argv)
 	parser.option("waveform-fitting", &fAnalysisOptions->fWaveformFitting, false)
 		.description("Fit waveforms using SFU algorithms").colour(DCYAN);
 	parser.option("is-correcting-cross-talk", &fAnalysisOptions->fIsCorrectingCrossTalk, false)
-		.takes_argument().description("Correct cross-talk").colour(DCYAN);
+		.description("Correct cross-talk").colour(DCYAN);
 
 	// program specific options
 	if(program.compare("grsisort") == 0) {
@@ -266,26 +294,33 @@ void TGRSIOptions::Load(int argc, char** argv)
 		parser.option("d debug", &fDebug, true)
 			.description("Write debug information to output/file, e.g. enables writing of TDescantDebug at analysis stage")
 			.default_value(false);
-		parser.option("no-record-dialog", &fRecordDialog, true).description("Dump stuff to screen");
 		parser.option("write-diagnostics", &fWriteDiagnostics, true).description("Write Parsing/SortingDiagnostics to root-file")
 			.colour(DGREEN);
 		parser.option("word-count-offset", &fWordOffset, true)
-			.description("Offset to the word count in the GRIFFIN header word, default is 1.")
-			.default_value(1);
+			.description("Offset to the word count in the GRIFFIN header word, default is -1 (disabled).")
+			.default_value(1).colour(DGREEN);
 		parser.option("log-errors", &fLogErrors, true);
 		parser.option("reading-material", &fReadingMaterial, true);
+		parser.option("write-fragment-tree write-frag-tree", &fWriteFragmentTree, true)
+			.description("Write fragment tree.").colour(DGREEN);
 		parser.option("bad-frags write-bad-frags bad-fragments write-bad-fragments", &fWriteBadFrags, true)
 			.description("Write fragments that failed parsing to BadFragmentTree").colour(DGREEN);
 		parser.option("separate-out-of-order", &fSeparateOutOfOrder, true)
 			.description("Write out-of-order fragments to a separate tree at the sorting stage")
 			.default_value(false).colour(DGREEN);
 		parser.option("ignore-odb", &fIgnoreFileOdb, true);
+		parser.option("ignore-odb-channels", &fIgnoreOdbChannels, true);
+		parser.option("downscaling", &fDownscaling, true).description("Downscaling factor for raw events to be processed").default_value(1);
 		parser.option("ignore-epics", &fIgnoreEpics, true);
 		parser.option("ignore-scaler", &fIgnoreScaler, true);
 		parser.option("suppress-error suppress-errors suppress_error suppress_errors", &fSuppressErrors, true)
 			.description("Suppress error output from parsing").colour(DGREEN);
 		parser.option("reconstruct-timestamp reconstruct-time-stamp", &fReconstructTimeStamp, true)
 			.description("Reconstruct missing high bits of timestamp").colour(DGREEN);
+		parser.option("ignore-missing-channel", &fIgnoreMissingChannel, true)
+			.description("Ignore missing channels completely (not written to fragment or analysis tree)").default_value(false);
+		parser.option("skip-input-sort", &fSkipInputSort, true)
+			.description("Skip sorting fragments before building events (default is false)").default_value(false);
 
 		parser.option("fragment-size", &fFragmentWriteQueueSize, true)
 			.description("Size of fragment write queue")
@@ -314,10 +349,37 @@ void TGRSIOptions::Load(int argc, char** argv)
 		parser.option("selector-only", &fSelectorOnly, true)
 			.description("Turns off PROOF to run a selector on the main thread");
 		parser.option("log-file", &fLogFile, true).description("File logs from grsiproof are written to");
+
+		parser.option("tree-name", &fTreeName, true)
+			.description("Name of tree to be proofed, default is empty, i.e. FragmentTree, AnalysisTree, and Lst2RootTree are checked");
+		parser.option("average-rate", &fAverageRateEstimation, true)
+			.description("use average rate instead of current rate");
+		parser.option("parallel-unzip", &fParallelUnzip, true)
+			.description("use parallel unzipping of input files");
+		parser.option("cache-size", &fCacheSize, true)
+			.description("set tree cache size (default = -1 = off)");
+		parser.option("sub-mergers", &fSubmergers, true)
+			.description("use sub mergers to merge result from workers (default = -1 = off, 0 = automatic number of mergers)");
+		parser.option("proof-stats", &fProofStats, true)
+			.description("enable proof stats");
+	} else if(program.compare("grsiframe") == 0) {
+		parser.option("max-workers", &fMaxWorkers, true)
+			.description("Maximum number of nodes to use when running a grsiframe session")
+			.default_value(1);
+		parser.option("tree-name", &fTreeName, true)
+			.description("Name of tree to be used, default is empty, i.e. FragmentTree, and AnalysisTree are checked");
+		parser.option("d debug", &fDebug, true)
+			.description("Increases verbosity of RDataFrame (also turns off the progress bar)")
+			.default_value(false);
+	}
+
+	if(program.compare("grsiframe") != 0) {
+		parser.option("max-events", &fNumberOfEvents, true)
+			.description("Maximum number of (midas, lst, rlmd, or tdr) events read").default_value(0);
 	}
 
    // look for any arguments ending with .info, pass to parser.
-   for(int i = 0; i < argc; i++) {
+   for(int i = 1; i < argc; i++) {
       std::string filename = argv[i];
       if(DetermineFileType(filename) == kFileType::CONFIG_FILE) {
          try {
@@ -360,10 +422,14 @@ void TGRSIOptions::Load(int argc, char** argv)
       FileAutoDetect(file);
    }
 
+	// load any additional parser library
+	if(!fParserLibrary.empty()) {
+		gSystem->Load(fParserLibrary.c_str());
+	}
+
 	// read analysis options from input file(s)
 	for(const std::string& file : fInputRootFiles) {
 		fAnalysisOptions->ReadFromFile(file);
-		fAnalysisOptions->Print();
 	}
 	// parse analysis options from command line options 
    try {
@@ -377,10 +443,12 @@ void TGRSIOptions::Load(int argc, char** argv)
 		fShowLogo = false;
 		fCloseAfterSort = true;
 		fWriteDiagnostics = true;
+		fWriteFragmentTree = true;
 		fWriteBadFrags = true;
 		fSeparateOutOfOrder = true;
 		fSuppressErrors = true;
 		fReconstructTimeStamp = true;
+		fWordOffset = -1;
 	}
 }
 
@@ -395,6 +463,7 @@ kFileType TGRSIOptions::DetermineFileType(const std::string& filename) const
    }
    std::string ext     = filename.substr(dot_pos + 1);
 
+	//check if this is a zipped file and if so get the extension before the zip-extension
    bool isZipped = (ext == "gz") || (ext == "bz2") || (ext == "zip");
    if(isZipped) {
       std::string remaining = filename.substr(0, dot_pos);
@@ -407,6 +476,9 @@ kFileType TGRSIOptions::DetermineFileType(const std::string& filename) const
 	if(ext == "lst") {
       return kFileType::LST_FILE;
    }
+	if(ext == "rlmd") {
+      return kFileType::RLMD_FILE;
+   }
 	if(ext == "evt") {
       return kFileType::NSCL_EVT;
    }
@@ -415,6 +487,9 @@ kFileType TGRSIOptions::DetermineFileType(const std::string& filename) const
    }
 	if(ext == "root") {
       return kFileType::ROOT_DATA;
+   }
+	if((ext == "cxx")) {
+      return kFileType::DATAFRAME;
    }
 	if((ext == "c") || (ext == "C") || (ext == "c+") || (ext == "C+") || (ext == "c++") || (ext == "C++")) {
       return kFileType::ROOT_MACRO;
@@ -446,6 +521,15 @@ kFileType TGRSIOptions::DetermineFileType(const std::string& filename) const
 	if(ext == "xml") {
       return kFileType::XML_FILE;
    }
+	
+	// strip possible parenthese with arguments for the script from the extension
+   size_t      opening_pos = ext.find_first_of('(');
+	if(opening_pos != std::string::npos) {
+		ext = ext.substr(0,opening_pos);
+		if((ext == "c") || (ext == "C") || (ext == "c+") || (ext == "C+") || (ext == "c++") || (ext == "C++")) {
+			return kFileType::ROOT_MACRO;
+		}
+	}
 	return kFileType::UNKNOWN_FILETYPE;
 }
 
@@ -458,11 +542,10 @@ bool TGRSIOptions::FileAutoDetect(const std::string& filename)
    case kFileType::NSCL_EVT:
    case kFileType::GRETINA_MODE2:
    case kFileType::GRETINA_MODE3:
-   case kFileType::MIDAS_FILE: fInputMidasFiles.push_back(filename); return true;
-
-   case kFileType::LST_FILE: fInputLstFiles.push_back(filename); return true;
-
-   case kFileType::TDR_FILE: fInputTdrFiles.push_back(filename); return true;
+   case kFileType::LST_FILE:
+   case kFileType::RLMD_FILE:
+   case kFileType::TDR_FILE:
+   case kFileType::MIDAS_FILE: fInputFiles.push_back(filename); return true;
 
    case kFileType::ROOT_DATA: fInputRootFiles.push_back(filename); return true;
 
@@ -470,36 +553,48 @@ bool TGRSIOptions::FileAutoDetect(const std::string& filename)
 
    case kFileType::CALIBRATED: fInputCalFiles.push_back(filename); return true;
 
-   case kFileType::COMPILED_SHARED_LIBRARY: {
+   case kFileType::DATAFRAME: fDataFrameLibrary = full_path(filename); return true;
 
+   case kFileType::COMPILED_SHARED_LIBRARY: {
       bool           used = false;
-      DynamicLibrary lib(filename);
+		// need absolute path not relative path in case the current working directory is not in LD_LIBRARY_PATH
+		std::string fullFilename = full_path(filename);
+      DynamicLibrary lib(fullFilename);
       if(lib.GetSymbol("MakeFragmentHistograms") != nullptr) {
-         fFragmentHistogramLib = filename;
+         fFragmentHistogramLib = fullFilename;
          used                  = true;
       }
       if(lib.GetSymbol("MakeAnalysisHistograms") != nullptr) {
-         fAnalysisHistogramLib = filename;
+         fAnalysisHistogramLib = fullFilename;
+         used                  = true;
+      }
+      if(lib.GetSymbol("CreateParser") != nullptr && lib.GetSymbol("DestroyParser") != nullptr &&
+			lib.GetSymbol("CreateFile")   != nullptr && lib.GetSymbol("DestroyFile")   != nullptr) {
+         fParserLibrary        = fullFilename;
+         used                  = true;
+      }
+      if(lib.GetSymbol("CreateHelper") != nullptr && lib.GetSymbol("DestroyHelper") != nullptr) {
+         fDataFrameLibrary     = fullFilename;
          used                  = true;
       }
       if(!used) {
-         std::cerr<<filename<<" did not contain MakeFragmentHistograms() or MakeAnalysisHistograms()"<<std::endl;
+         std::cerr<<fullFilename<<" did not contain MakeFragmentHistograms or MakeAnalysisHistograms or CreateParser and others or CreateHelper and DestroyHelper"<<std::endl;
       }
-      return true;
+      return used;
    }
 
    case kFileType::GVALUE: fInputValFiles.push_back(filename); return true;
 
    case kFileType::PRESETWINDOW: fInputWinFiles.push_back(filename); return true;
 
-   case kFileType::CUTS_FILE: fInputCutsFiles.push_back(filename); return true;
+   case kFileType::CUTS_FILE: fInputCutFiles.push_back(filename); return true;
 
    case kFileType::CONFIG_FILE: return false;
 
    case kFileType::XML_FILE: fInputOdbFiles.push_back(filename); return true;
 
    case kFileType::UNKNOWN_FILETYPE:
-   default: printf("\tDiscarding unknown file: %s\n", filename.c_str()); return false;
+   default: std::cout<<"\tDiscarding unknown file: "<<filename<<std::endl; return false;
    }
 }
 
@@ -530,17 +625,17 @@ bool TGRSIOptions::WriteToFile(TFile* file)
    if(oldoption == "READ") {
       file->ReOpen("UPDATE");
    }
-   if(!gDirectory) {
-      printf("No file opened to write to.\n");
+   if(!gDirectory) { // we don't compare to nullptr here, as ROOT >= 6.24.00 uses the TDirectoryAtomicAdapter structure with a bool() operator
+		std::cout<<"No file opened to write TGRSIOptions to."<<std::endl;
       success = false;
    } else {
-      Get()->Write();
-		fAnalysisOptions->Write();
+      Get()->Write("GRSIOptions", TObject::kOverwrite);
+		fAnalysisOptions->WriteToFile(file);
    }
 
-   printf("Writing TGRSIOptions to %s\n", gDirectory->GetFile()->GetName());
+   std::cout<<"Writing TGRSIOptions to "<<gDirectory->GetFile()->GetName()<<std::endl;
    if(oldoption == "READ") {
-      printf("  Returning %s to \"%s\" mode.\n", gDirectory->GetFile()->GetName(), oldoption.c_str());
+      std::cout<<"  Returning "<<gDirectory->GetFile()->GetName()<<" to \""<<oldoption<<"\" mode."<<std::endl;
       file->ReOpen("READ");
    }
    oldDir->cd(); // Go back to original gDirectory
@@ -565,7 +660,7 @@ Bool_t TGRSIOptions::ReadFromFile(TFile* file)
    }
 
    if(gDirectory->GetFile() == nullptr) {
-      printf("File does not exist\n");
+      std::cout<<"File does not exist"<<std::endl;
       oldDir->cd();
       return false;
    }

@@ -59,10 +59,12 @@ struct SpeHeader {
 // the value of all bins in int sizes
 // an integer os bin size * 4           ------- number of char in the histogram.
 
+void ProcessKeys(TList* keys, TList* histsToWrite, TList* matsToWrite, TList* m4bsToWrite, bool split, bool compress);
 void AddToList(TList*, TH2*, bool, bool);
 void WriteHist(TH1*, std::fstream*);
 void WriteMat(TH2*, std::fstream*);
 void WriteM4b(TH2*, std::fstream*);
+void WriteM8k(TH2*, std::fstream*);
 
 int main(int argc, char** argv)
 {
@@ -70,17 +72,20 @@ int main(int argc, char** argv)
    if(argc < 2 || (infile = TFile::Open(argv[1], "read")) == nullptr) {
       std::cout<<"problem opening file."<<std::endl
                <<"Usage: "<<argv[0]
-               <<" file.root (optional: -s to split large matrices, -c to compress large matrices, which need to go last!)"<<std::endl;
+               <<" file.root (optional after the file: -8 to use 8k matrices, -s to split large matrices, -c to compress large matrices, which need to go last!)"<<std::endl;
       return 1;
    }
 
    bool split    = false;
    bool compress = false;
+	bool bigMatrix = false;
    for(int i = 2; i < argc; ++i) {
       if(strcmp(argv[i], "-s") == 0) {
          split = true;
       } else if(strcmp(argv[i], "-c") == 0) {
          compress = true;
+      } else if(strcmp(argv[i], "-8") == 0) {
+         bigMatrix = true;
       } else {
          std::cout<<"Unrecognized flag "<<argv[i]<<std::endl;
       }
@@ -113,43 +118,7 @@ int main(int argc, char** argv)
    auto* histsToWrite = new TList();
    auto* matsToWrite  = new TList();
    auto* m4bsToWrite  = new TList();
-   // int counter = 1;
-   while(TKey* currentkey = dynamic_cast<TKey*>(next())) {
-      std::string keytype = currentkey->ReadObj()->IsA()->GetName();
-      if(keytype.compare(0, 3, "TH1") == 0) {
-         // printf("%i currentkey->GetName() = %s\n",counter++, currentkey->GetName());
-         // if((counter-1)%4==0)
-         //	printf("*****************************\n");
-         histsToWrite->Add(currentkey->ReadObj());
-      } else if(keytype.compare(0, 4, "TH2C") == 0 || keytype.compare(0, 4, "TH2S") == 0) {
-         AddToList(matsToWrite, dynamic_cast<TH2*>(currentkey->ReadObj()), split, compress);
-      } else if(keytype.compare(0, 3, "TH2") == 0) {
-         AddToList(m4bsToWrite, dynamic_cast<TH2*>(currentkey->ReadObj()), split, compress);
-      } else if(keytype.compare(0, 3, "THn") == 0) {
-         THnSparse* hist = (dynamic_cast<THnSparse*>(currentkey->ReadObj()));
-         if(hist->GetNdimensions() == 1) {
-            histsToWrite->Add(hist->Projection(0));
-         } else if(hist->GetNdimensions() == 2) {
-            if(keytype.compare(17, 1, "C") == 0 || keytype.compare(17, 1, "S") == 0) {
-               AddToList(matsToWrite, hist->Projection(0, 1), split, compress);
-            } else {
-               AddToList(m4bsToWrite, hist->Projection(0, 1), split, compress);
-            }
-         }
-      } else if(keytype.compare(0, 5, "GHSym") == 0) {
-         if(keytype.compare(5, 1, "F") == 0) {
-            AddToList(m4bsToWrite, dynamic_cast<GHSymF*>(currentkey->ReadObj())->GetMatrix(), split, compress);
-         } else if(keytype.compare(5, 1, "D") == 0) {
-            AddToList(m4bsToWrite, dynamic_cast<GHSymF*>(currentkey->ReadObj())->GetMatrix(), split, compress);
-         } else {
-            std::cout<<"unknown GHSym type "<<keytype<<std::endl;
-         }
-      } else {
-         std::cout<<"skipping "<<keytype<<std::endl;
-      }
-   }
-
-   // printf("histsToWrite->GetSize() = %i\n", histsToWrite->GetSize());
+	ProcessKeys(keys, histsToWrite, matsToWrite, m4bsToWrite, split, compress);
 
    TIter nexthist(histsToWrite);
    while(TH1* currenthist = dynamic_cast<TH1*>(nexthist())) {
@@ -179,10 +148,18 @@ int main(int argc, char** argv)
    while(TH2* currentm4b = dynamic_cast<TH2*>(nextm4b())) {
       std::string outfilename = path + "/";
       outfilename.append(currentm4b->GetName());
-      outfilename.append(".m4b");
+		if(bigMatrix) {
+			outfilename.append(".m8k");
+		} else {
+			outfilename.append(".m4b");
+		}
       std::fstream outfile;
       outfile.open(outfilename.c_str(), std::ios::out | std::ios::binary);
-      WriteM4b(currentm4b, &outfile);
+		if(bigMatrix) {
+			WriteM8k(currentm4b, &outfile);
+		} else {
+			WriteM4b(currentm4b, &outfile);
+		}
       printf("\t%s written to file %s.\n", currentm4b->GetName(), outfilename.c_str());
       outfile.close();
    }
@@ -191,6 +168,51 @@ int main(int argc, char** argv)
    // outfile.close();
 
    return 0;
+}
+
+void ProcessKeys(TList* keys, TList* histsToWrite, TList* matsToWrite, TList* m4bsToWrite, bool split, bool compress)
+{
+	std::vector<TDirectoryFile*> directories;
+   TIter next(keys);
+   while(TKey* currentkey = dynamic_cast<TKey*>(next())) {
+      std::string keytype = currentkey->ReadObj()->IsA()->GetName();
+      if(keytype.compare(0, 3, "TH1") == 0) {
+         histsToWrite->Add(currentkey->ReadObj());
+      } else if(keytype.compare(0, 4, "TH2C") == 0 || keytype.compare(0, 4, "TH2S") == 0) {
+         AddToList(matsToWrite, dynamic_cast<TH2*>(currentkey->ReadObj()), split, compress);
+      } else if(keytype.compare(0, 3, "TH2") == 0) {
+         AddToList(m4bsToWrite, dynamic_cast<TH2*>(currentkey->ReadObj()), split, compress);
+      } else if(keytype.compare(0, 3, "THn") == 0) {
+         THnSparse* hist = (dynamic_cast<THnSparse*>(currentkey->ReadObj()));
+         if(hist->GetNdimensions() == 1) {
+            histsToWrite->Add(hist->Projection(0));
+         } else if(hist->GetNdimensions() == 2) {
+            if(keytype.compare(17, 1, "C") == 0 || keytype.compare(17, 1, "S") == 0) {
+               AddToList(matsToWrite, hist->Projection(0, 1), split, compress);
+            } else {
+               AddToList(m4bsToWrite, hist->Projection(0, 1), split, compress);
+            }
+         }
+      } else if(keytype.compare(0, 5, "GHSym") == 0) {
+         if(keytype.compare(5, 1, "F") == 0) {
+            AddToList(m4bsToWrite, dynamic_cast<GHSymF*>(currentkey->ReadObj())->GetMatrix(), split, compress);
+         } else if(keytype.compare(5, 1, "D") == 0) {
+            AddToList(m4bsToWrite, dynamic_cast<GHSymF*>(currentkey->ReadObj())->GetMatrix(), split, compress);
+         } else {
+            std::cout<<"unknown GHSym type "<<keytype<<std::endl;
+         }
+		} else if(keytype.compare(0, 14, "TDirectoryFile") == 0) {
+			directories.push_back(dynamic_cast<TDirectoryFile*>(currentkey->ReadObj()));
+      } else {
+         std::cout<<"skipping "<<keytype<<std::endl;
+      }
+   }
+	// loop over directories and process keys in them
+	for(auto dir : directories) {
+		TList* dir_keys = dir->GetListOfKeys();
+		dir_keys->Sort();
+		ProcessKeys(dir_keys, histsToWrite, matsToWrite, m4bsToWrite, split, compress);
+	}
 }
 
 void AddToList(TList* list, TH2* hist, bool split, bool compress)
@@ -301,11 +323,41 @@ void WriteM4b(TH2* mat, std::fstream* outfile)
    delete empty;
 }
 
+void WriteM8k(TH2* mat, std::fstream* outfile)
+{
+   int xbins = mat->GetXaxis()->GetNbins();
+   int ybins = mat->GetYaxis()->GetNbins();
+
+   auto* empty = new TH1D("empty", "empty", 8192, 0., 8192.);
+
+   for(int y = 1; y <= 8192; ++y) {
+      uint32_t buffer[8192] = {0};
+      TH1D*    proj;
+      if(y <= ybins) {
+         proj = mat->ProjectionX("proj", y, y);
+      } else {
+         proj = empty;
+      }
+      for(int x = 1; x <= 8192; ++x) {
+         if(x <= xbins) {
+            buffer[x - 1] = static_cast<uint32_t>(proj->GetBinContent(x)); //    mat->GetBinContent(x,y));
+         } else {
+            buffer[x - 1] = 0;
+         }
+      }
+      outfile->write(reinterpret_cast<char*>(&buffer), sizeof(buffer));
+   }
+   delete empty;
+}
+
 void WriteHist(TH1* hist, std::fstream* outfile)
 {
    SpeHeader spehead;
    spehead.buffsize = 24;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
    strncpy(spehead.label, hist->GetName(), 8);
+#pragma GCC diagnostic pop
 
    if(hist->GetRMS() > 16384 / 2) {
       while(hist->GetNbinsX() > 16384) {

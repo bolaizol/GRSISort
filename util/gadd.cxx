@@ -163,9 +163,9 @@ int main(int argc, char** argv)
          }
          ++ffirst;
       } else if(argv[a][0] == '-') {
-         char ft[4];
+         char ft[5];
          for(int j = 0; j <= 9; ++j) {
-            snprintf(ft, 4, "-f%d", j);
+            snprintf(ft, 5, "-f%d", j);
             if(strcmp(argv[a], ft) == 0) {
                force   = kTRUE;
                newcomp = j;
@@ -250,13 +250,13 @@ int main(int argc, char** argv)
    if(status) {
       if(verbosity == 1) {
          std::cout<<"gadd merged "<<merger.GetMergeList()->GetEntries()<<" input files in "<<targetname
-                  <<".\n";
+                  <<"."<<std::endl;
       }
       return 0;
    }
    if(verbosity == 1) {
       std::cout<<"gadd failure during the merge of "<<merger.GetMergeList()->GetEntries()<<" input files in "
-               <<targetname<<".\n";
+               <<targetname<<"."<<std::endl;
    }
    return 1;
 }

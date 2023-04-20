@@ -40,8 +40,13 @@ void GValue::Copy(TObject& obj) const
 
 double GValue::Value(const std::string& name)
 {
+	return GValue::Value(name, sqrt(-1));
+}
+
+double GValue::Value(const std::string& name, const double& defaultValue)
+{
    if(fValueVector.count(name) == 0u) {
-      return sqrt(-1);
+      return defaultValue;
    }
    return fValueVector.at(name)->GetValue();
 }
@@ -100,28 +105,25 @@ bool GValue::ReplaceValue(GValue* oldvalue)
    return false;
 }
 
-bool GValue::AddValue(GValue* value, Option_t* opt)
+bool GValue::AddValue(GValue* value, Option_t*)
 {
    if(value == nullptr) {
       return false;
    }
-   TString option(opt);
-
    std::string temp_string = value->GetName();
+   if(temp_string.compare("") == 0) {
+      // default value, get rid of it and ignore;
+      delete value;
+      return false;
+   }
 
-   GValue* oldvalue = GValue::FindValue(value->GetName());
+   GValue* oldvalue = GValue::FindValue(temp_string);
    if(oldvalue != nullptr) {
       value->ReplaceValue(oldvalue);
       delete value;
       return true;
    }
-   if(temp_string.compare("") == 0) {
-      // default value, get rid of it and ignore;
-      delete value;
-      value = nullptr;
-      return false;
-   }
-   fValueVector[temp_string] = value; //.push_back(value);
+   fValueVector[temp_string] = value;
    return true;
 }
 
@@ -131,8 +133,12 @@ std::string GValue::PrintToString() const
    std::string buffer;
    buffer.append(GetName());
    buffer.append("\t{\n");
-   buffer.append("value:\t");
-   buffer.append(Form("%f\n", fValue));
+   buffer.append(Form("value:\t%f\n", fValue));
+	if(!info.empty()) {
+		buffer.append("info:\t");
+		buffer.append(info);
+		buffer.append("\n");
+	}
    buffer.append("}\n");
    return buffer;
 }
@@ -178,6 +184,16 @@ std::string GValue::WriteToBuffer(Option_t*)
    return buffer;
 }
 
+void GValue::Clear()
+{
+	// loop over all values and delete them
+	for(auto value : fValueVector) {
+		delete value.second;
+	}
+	// delete map
+	fValueVector.clear();
+}
+
 int GValue::ReadValFile(const char* filename, Option_t* opt)
 {
    std::string infilename = filename;
@@ -188,13 +204,13 @@ int GValue::ReadValFile(const char* filename, Option_t* opt)
    std::ifstream infile;
    infile.open(infilename.c_str());
    if(!infile) {
-      fprintf(stderr, "%s:  could not open infile %s.", __PRETTY_FUNCTION__, infilename.c_str());
+      std::cerr<<__PRETTY_FUNCTION__<<":  could not open infile "<<infilename<<std::endl;
       return -2;
    }
    infile.seekg(0, std::ios::end);
    size_t length = infile.tellg();
    if(length == 0) {
-      fprintf(stderr, "%s:  infile %s appears to be empty.", __PRETTY_FUNCTION__, infilename.c_str());
+      std::cerr<<__PRETTY_FUNCTION__<<":  infile "<<infilename<<" appears to be empty."<<std::endl;
       return -2;
    }
 
@@ -205,10 +221,6 @@ int GValue::ReadValFile(const char* filename, Option_t* opt)
    sbuffer.assign(buffer.data());
 
    int values_found = ParseInputData(sbuffer, EPriority::kValFile, opt);
-   // if(values_found) {
-   //  //fFileNames.push_back(std::string(filename);
-   //  fValueData = sbuffer; //.push_back(std::string((const char*)buffer);
-   //}
    return values_found;
 }
 
@@ -264,9 +276,8 @@ int GValue::ParseInputData(const std::string& input, EPriority priority, Option_
                type = line.substr(openbrace + 1, colon - (openbrace + 1));
             }
             line = line.substr(colon + 1, line.length());
-            // trim(&line); //this is not needed? VB
+				trim(&line); //strip beginning whitespace (not needed for value itself, but for the readability of info)
             trim(&type);
-            // std::istringstream ss(line); //this is not used anywhere? VB
             int j = 0;
             while(type[j] != 0) {
                char c    = *(type.c_str() + j);
@@ -303,7 +314,7 @@ int GValue::ParseInputData(const std::string& input, EPriority priority, Option_
       }
    }
    if(strcmp(opt, "debug") == 0) {
-      printf("parsed %i lines,\n", linenumber);
+      std::cout<<"parsed "<<linenumber<<" lines"<<std::endl;
    }
    return newvalues;
 }

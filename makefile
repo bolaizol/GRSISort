@@ -1,4 +1,4 @@
-.PHONY: clean all extras docs doxygen grsirc
+.PHONY: clean all extras docs doxygen grsirc complete parsers GRSIData ILLData iThembaData HILData
 .SECONDARY:
 .SECONDEXPANSION:
 
@@ -7,22 +7,26 @@ PLATFORM:=$(shell uname)
 # EDIT THIS SECTION
 
 INCLUDES   = include users
-CFLAGS     = -g -std=c++11 -O3 -Wall -Wextra -pedantic -Wno-unknown-pragmas -Wno-unused-function -Wshadow
+ifneq (,$(findstring -std=,$(shell root-config --cflags)))
+CFLAGS = 
+LINKFLAGS_SUFFIX  = 
+else
+CFLAGS = -std=c++11 
+LINKFLAGS_SUFFIX  = -std=c++11 
+endif
+CFLAGS += -g -O3 -Wall -Wextra -pedantic -Wno-unknown-pragmas -Wno-unused-function
+LINKFLAGS_SUFFIX  += -L/opt/X11/lib -lX11 -lXpm
 #-Wall -Wextra -pedantic -Wno-unused-parameter
 LINKFLAGS_PREFIX  =
-LINKFLAGS_SUFFIX  = -L/opt/X11/lib -lX11 -lXpm -std=c++11
 SRC_SUFFIX = cxx
 
 # EVERYTHING PAST HERE SHOULD WORK AUTOMATICALLY
 
-MAJOR_ROOT_VERSION:=$(shell root-config --version | cut -d '.' -f1)
-MINOR_ROOT_VERSION:=$(shell root-config --version | cut -d '.' -f2 | cut -d '/' -f1)
 ROOT_PYTHON_VERSION=$(shell root-config --python-version)
 
 MATHMORE_INSTALLED:=$(shell root-config --has-mathmore)
 XML_INSTALLED:=$(shell root-config --has-xml)
 
-CFLAGS += -DMAJOR_ROOT_VERSION=${MAJOR_ROOT_VERSION}
 ifeq ($(ROOT_PYTHON_VERSION),2.7)
   CFLAGS += -DHAS_CORRECT_PYTHON_VERSION
 endif
@@ -30,7 +34,7 @@ endif
 ifeq ($(PLATFORM),Darwin)
 export __APPLE__:= 1
 CFLAGS     += -DOS_DARWIN -DHAVE_ZLIB
-CFLAGS     += -I/opt/X11/include -Qunused-arguments
+CFLAGS     += -I/opt/X11/include -Qunused-arguments -I/opt/local/include
 CPP        = clang++
 SHAREDSWITCH = -Qunused-arguments -shared -undefined dynamic_lookup -dynamiclib -Wl,-install_name,'@executable_path/../lib/'# NO ENDING SPACE
 HEAD=ghead
@@ -39,12 +43,12 @@ LIBRARY_DIRS   := $(shell $(FIND) libraries/* -type d)
 else
 export __LINUX__:= 1
 CPP        = g++
-CFLAGS     += -Wl,--no-as-needed
+CFLAGS     += -Wl,--no-as-needed -Wshadow
 LINKFLAGS_PREFIX += -Wl,--no-as-needed
 SHAREDSWITCH = -shared -Wl,-soname,# NO ENDING SPACE
 HEAD=head
 FIND=find
-LIBRARY_DIRS   := $(shell $(FIND) libraries/* -type d -links 2 2> /dev/null | grep -v SourceData | grep -v SRIMData)
+LIBRARY_DIRS   := $(shell $(FIND) libraries/* -type d -maxdepth 2 2> /dev/null | grep -v SourceData | grep -v SRIMData)
 endif
 
 ROOTCINT=$(shell command -v rootcint 2> /dev/null)
@@ -78,7 +82,7 @@ INCLUDES  := $(addprefix -I$(PWD)/,$(INCLUDES))
 CFLAGS    += $(shell root-config --cflags)
 CFLAGS    += -MMD -MP $(INCLUDES)
 LINKFLAGS += -Llib $(addprefix -l,$(LIBRARY_NAMES)) -Wl,-rpath,\$$ORIGIN/../lib
-LINKFLAGS += $(shell root-config --glibs) -lSpectrum -lPyROOT -lMinuit -lGuiHtml -lTreePlayer -lX11 -lXpm -lProof -lTMVA
+LINKFLAGS += $(shell root-config --glibs) -lSpectrum -lMinuit -lGuiHtml -lTreePlayer -lX11 -lXpm -lProof -lTMVA
 
 # RCFLAGS are being used for rootcint
 ifeq ($(MATHMORE_INSTALLED),yes)
@@ -100,7 +104,7 @@ ROOT_LIBFLAGS := $(shell root-config --cflags --glibs)
 UTIL_O_FILES    := $(patsubst %.$(SRC_SUFFIX),.build/%.o,$(wildcard util/*.$(SRC_SUFFIX)))
 #SANDBOX_O_FILES := $(patsubst %.$(SRC_SUFFIX),.build/%.o,$(wildcard Sandbox/*.$(SRC_SUFFIX)))
 SCRIPT_O_FILES    := $(patsubst %.$(SRC_SUFFIX),.build/%.o,$(wildcard scripts/*.$(SRC_SUFFIX)))
-PROOF_O_FILES    := $(patsubst %.$(SRC_SUFFIX),.build/%.o,$(wildcard GRSIProof/*.$(SRC_SUFFIX)))
+PROOF_O_FILES    := $(patsubst %.$(SRC_SUFFIX),.build/%.o,$(wildcard GRSIProof/grsiproof.$(SRC_SUFFIX)))
 ANALYSIS_O_FILES := $(patsubst %.$(SRC_SUFFIX),.build/%.o,$(wildcard myAnalysis/*.$(SRC_SUFFIX)))
 MAIN_O_FILES    := $(patsubst %.$(SRC_SUFFIX),.build/%.o,$(wildcard src/*.$(SRC_SUFFIX)))
 EXE_O_FILES     := $(UTIL_O_FILES) $(SANDBOX_O_FILES) $(SCRIPT_O_FILES) $(ANALYSIS_O_FILES) $(PROOF_O_FILES)
@@ -108,6 +112,8 @@ EXECUTABLES     := $(patsubst %.o,bin/%,$(notdir $(EXE_O_FILES))) bin/grsisort
 
 HISTOGRAM_SO    := $(patsubst histos/%.$(SRC_SUFFIX),lib/lib%.so,$(wildcard histos/*.$(SRC_SUFFIX)))
 FILTER_SO    := $(patsubst filters/%.$(SRC_SUFFIX),lib/lib%.so,$(wildcard filters/*.$(SRC_SUFFIX)))
+
+PARSER_LIBRARIES := $(shell ls -d GRSIData ILLData iThembaData HILData 2> /dev/null)
 
 ifdef VERBOSE
 run_and_test = @echo $(1) && $(1);
@@ -130,6 +136,8 @@ endif
 
 all: include/GVersion.h grsirc $(EXECUTABLES) $(LIBRARY_OUTPUT) lib/libGRSI.so config $(HISTOGRAM_SO) $(FILTER_SO)
 	@$(FIND) .build users -name "*.pcm" -exec cp {} lib/ \;
+	@$(FIND) .build users -name "*.rootmap" -exec cp {} lib/ \;
+	@$(FIND) . -maxdepth 1 -name "*.pcm" -exec mv {} lib/ \;
 	@printf "$(OK_COLOR)Compilation successful, $(WARN_COLOR)woohoo!$(NO_COLOR)\n"
 
 docs: doxygen
@@ -166,10 +174,10 @@ include/GVersion.h:
 grsirc:
 	$(call run_and_test,util/gen_grsirc.sh,$@,$(COM_COLOR),$(BLD_STRING),$(OBJ_COLOR) )
 
-lib/lib%.so: .build/histos/%.o | lib include/GVersion.h
+lib/lib%.so: .build/histos/%.o | include/GVersion.h lib
 	$(call run_and_test,$(CPP) -fPIC $^ $(SHAREDSWITCH)lib$*.so $(ROOT_LIBFLAGS) -o $@,$@,$(BLD_COLOR),$(BLD_STRING),$(OBJ_COLOR) )
 
-lib/lib%.so: .build/filters/%.o | lib include/GVersion.h
+lib/lib%.so: .build/filters/%.o | include/GVersion.h lib
 	$(call run_and_test,$(CPP) -fPIC $^ $(SHAREDSWITCH)lib$*.so $(ROOT_LIBFLAGS) -o $@,$@,$(BLD_COLOR),$(BLD_STRING),$(OBJ_COLOR) )
 
 config: bin
@@ -205,7 +213,7 @@ find_linkdef = $(shell $(FIND) $(1) -name "*LinkDef.h")
 define library_template
 .build/$(1)/$(notdir $(1))Dict.cxx: $(1)/LinkDef.h $$(call dict_header_files,$(1)/LinkDef.h) 
 	@mkdir -p $$(dir $$@)
-	$$(call run_and_test,$$(ROOTCINT) -f $$@ -c $$(INCLUDES) $$(RCFLAGS) -p $$(notdir $$(filter-out $$<,$$^)) $$<,$$@,$$(COM_COLOR),$$(BLD_STRING) ,$$(OBJ_COLOR))
+	$$(call run_and_test,$$(ROOTCINT) -f $$@ $$(INCLUDES) -I/opt/local/include $$(RCFLAGS) -s $(notdir $(1)) -multiDict -rml lib$(notdir $(1)).so -rmf .build/$(1)/$(notdir $(1)).rootmap $$(notdir $$(filter-out $$<,$$^)) $$<,$$@,$$(COM_COLOR),$$(BLD_STRING) ,$$(OBJ_COLOR))
 
 .build/$(1)/LibDictionary.o: .build/$(1)/$(notdir $(1))Dict.cxx
 	$$(call run_and_test,$$(CPP) -fPIC -c $$< -o $$@ $$(CFLAGS),$$@,$$(COM_COLOR),$$(COM_STRING),$$(OBJ_COLOR) )
@@ -221,6 +229,39 @@ html: all
 	@grsisort -q -l --work_harder util/html_generator.C #>/dev/null
 	@$(RM) -r grsisort
 	@$(RM) tempfile.out
+
+complete: all parsers
+
+parsers: all
+	@$(foreach parser,$(PARSER_LIBRARIES),$(MAKE) -C $(parser);)
+
+GRSIData: all
+	@$(MAKE) -C GRSIData
+
+GRSIData-clean:
+	@$(MAKE) -C GRSIData clean
+	@$(MAKE) clean
+
+ILLData: all
+	@$(MAKE) -C ILLData
+
+ILLData-clean:
+	@$(MAKE) -C ILLData clean
+	@$(MAKE) clean
+
+iThembaData: all
+	@$(MAKE) -C iThembaData
+
+iThembaData-clean:
+	@$(MAKE) -C iThembaData clean
+	@$(MAKE) clean
+
+HILData: all
+	@$(MAKE) -C HILData
+
+HILData-clean:
+	@$(MAKE) -C HILData clean
+	@$(MAKE) clean
 
 clean:
 	@printf "\n$(WARN_COLOR)Cleaning up$(NO_COLOR)\n\n"

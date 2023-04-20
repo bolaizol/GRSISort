@@ -28,10 +28,11 @@ public:
    static GValue* GetDefaultValue() { return fDefaultValue; }
    // Search fValueVector for GValue with name given by string
    static GValue* FindValue(const std::string& = "");
-   static void SetReplaceValue(const std::string& name, double value, EPriority priority = EPriority::kUser);
+   static void    SetReplaceValue(const std::string& name, double value, EPriority priority = EPriority::kUser);
    static GValue* Get(std::string name = "") { return FindValue(std::move(name)); }
-   static double                  Value(const std::string&);
-   static TList*                  AllValues()
+   static double  Value(const std::string&); // get the named value, returns sqrt(-1) = NaN
+   static double  Value(const std::string&, const double&); // try and find the named value, otherwise return the provided default
+   static TList*  AllValues()
    {
       auto* output = new TList;
       output->SetOwner(false);
@@ -47,7 +48,7 @@ public:
    bool AppendValue(GValue*);
    bool ReplaceValue(GValue*);
 
-   // virtual void Clear(Option_t *opt="");
+   using TNamed::Clear;
    void Print(Option_t* opt = "") const override;
    void Copy(TObject& obj) const override;
    // virtual bool Notify();
@@ -55,6 +56,7 @@ public:
    static int         Size() { return fValueVector.size(); }
    std::string        PrintToString() const;
    static std::string WriteToBuffer(Option_t* opt = "");
+	static void			 Clear();
 
 private:
    double         fValue{0.};

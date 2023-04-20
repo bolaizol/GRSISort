@@ -6,11 +6,11 @@
 #include <stdexcept>
 #include <pwd.h>
 
-#include "TEnv.h"
 #include "TPluginManager.h"
 #include "TGRSIint.h"
 
 #include "GVersion.h"
+#include "Globals.h"
 #include "TThread.h"
 
 #ifdef __APPLE__
@@ -68,9 +68,8 @@ int main(int argc, char** argv)
       TThread::Initialize();
       TObject::SetObjectStat(false);
 
-      // Find the grsisort environment variable so that we can read in .grsirc
       SetDisplay();
-      SetGRSIEnv();
+		grsi::SetGRSIEnv();
       SetGRSIPluginHandlers();
       TGRSIint* input = nullptr;
 
@@ -82,20 +81,12 @@ int main(int argc, char** argv)
    } catch(grsi::exit_exception& e) {
       std::cerr<<e.message<<std::endl;
       // Close files and clean up properly here
-   }
+   } catch(std::runtime_error& e) {
+		std::cerr<<e.what()<<std::endl;
+		std::cout<<"Don't know how to handle this error, exiting "<<argv[0]<<"!"<<std::endl;
+	}
 
    return 0;
-}
-
-void SetGRSIEnv()
-{
-   std::string grsi_path = getenv("GRSISYS"); // Finds the GRSISYS path to be used by other parts of the grsisort code
-   if(grsi_path.length() > 0) {
-      grsi_path += "/";
-   }
-   // Read in grsirc in the GRSISYS directory to set user defined options on grsisort startup
-   grsi_path += ".grsirc";
-   gEnv->ReadFile(grsi_path.c_str(), kEnvChange);
 }
 
 void SetGRSIPluginHandlers()
@@ -170,9 +161,10 @@ static void SetDisplay()
          tty += 5; // remove "/dev/"
          STRUCT_UTMP* utmp_entry = SearchEntry(ReadUtmp(), tty);
          if(utmp_entry != nullptr) {
-            auto* display = new char[sizeof(utmp_entry->ut_host) + 15];
-            auto* host    = new char[sizeof(utmp_entry->ut_host) + 1];
-            strncpy(host, utmp_entry->ut_host, sizeof(utmp_entry->ut_host));
+				size_t length = sizeof(utmp_entry->ut_host);
+            auto* display = new char[length + 15];
+            auto* host    = new char[length + 1];
+            strncpy(host, utmp_entry->ut_host, length); // instead of using size of utmp_entry->ut_host to prevent warning from gcc 9.1
             host[sizeof(utmp_entry->ut_host)] = 0;
             if(host[0] != 0) {
                if(strchr(host, ':') != nullptr) {

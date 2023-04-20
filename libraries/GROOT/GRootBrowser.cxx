@@ -1,49 +1,3 @@
-//  Largely! taken from GRootBrowser in the Root.  Need to change
-//  some of the connections in CreateBrowser() function to
-//  the GRootCanvas class instead of the the TRootCanvas.
-//  pcb.
-
-///////////////////////////////////////////////////////////////////////////
-///
-/// \class GRootBrowser
-///
-/// This class creates a ROOT object browser, constitued by three main
-/// tabs.
-///
-/// All tabs can 'swallow' frames, thanks to the new method:
-///   ExecPlugin(const char *name = 0, const char *fname = 0,
-///              const char *cmd = 0, Int_t pos = kRight,
-///              Int_t subpos = -1)
-/// allowing to select plugins (can be a macro or a command)
-/// to be executed, and where to embed the frame created by
-/// the plugin (tab and tab element). Examples:
-///
-/// create a new browser:
-/// TBrowser b;
-///
-/// create a new TCanvas in a new top right tab element:
-/// b.ExecPlugin("Canvas", 0, "new TCanvas()");
-///
-/// create a new top right tab element embedding the
-/// TGMainFrame created by the macro 'myMacro.C':
-/// b.ExecPlugin("MyPlugin", "myMacro.C");
-///
-/// create a new bottom tab element embedding the
-/// TGMainFrame created by the macro 'myMacro.C':
-/// b.ExecPlugin("MyPlugin", "myMacro.C", 0, GRootBrowser::kBottom);
-///
-/// this browser implementation can be selected via the env
-/// 'Browser.Name' in .rootrc, (GRootBrowser or GRootBrowserLite)
-/// the default being GRootBrowserLite (old browser)
-/// a list of options (plugins) for the new GRootBrowser is also
-/// specified via the env 'Browser.Options' in .rootrc, the default
-/// being: FECI
-/// Here is the list of available options:
-/// F: File browser E: Text Editor H: HTML browser C: Canvas I: I/O
-/// redirection P: Proof G: GL viewer
-///
-///////////////////////////////////////////////////////////////////////////
-
 #include "TROOT.h"
 #include "TSystem.h"
 #include "TApplication.h"
@@ -61,6 +15,7 @@
 #include "TGFileDialog.h"
 #include "TObjString.h"
 #include "TVirtualPad.h"
+#include "TVirtualX.h"
 #include "TEnv.h"
 #include <KeySymbols.h>
 
@@ -84,13 +39,6 @@
 static const char* gOpenFileTypes[] = {"ROOT files", "*.root", "All files", "*", nullptr, nullptr};
 
 static const char* gPluginFileTypes[] = {"ROOT files", "*.C", "All files", "*", nullptr, nullptr};
-
-//_____________________________________________________________________________
-//
-// GRootBrowser
-//
-// The main ROOT object browser.
-//_____________________________________________________________________________
 
 /// \cond CLASSIMP
 ClassImp(GRootBrowser)
@@ -292,7 +240,7 @@ void GRootBrowser::CreateBrowser(const char* name)
 GRootBrowser::~GRootBrowser()
 {
    /// Clean up all widgets, frames and layouthints that were used
-   printf("I AM HERE!\n");
+	std::cout<<__PRETTY_FUNCTION__<<std::endl;
    fflush(stdout);
 
    if(fIconPic != nullptr) {
@@ -699,9 +647,9 @@ void GRootBrowser::HandleMenu(Int_t id)
 #ifdef WIN32
       new TWin32SplashThread(kTRUE);
 #else
-      char str[32];
-      sprintf(str, "About ROOT %s...", gROOT->GetVersion());
-      hd = new TRootHelpDialog(this, str, 600, 400);
+		std::ostringstream str;
+		str<<"About ROOT "<<gROOT->GetVersion()<<"...";
+		hd = new TRootHelpDialog(this, str.str(), 600, 400);
       hd->SetText(gHelpAbout);
       hd->Popup();
 #endif // WIN32
@@ -834,7 +782,6 @@ void GRootBrowser::InitPlugins(Option_t* opt)
 
       // Canvas plugin...
       if(opt[i] == 'C') {
-         printf("I AM NOW HERE!\n");
          fflush(stdout);
          cmd.Form("new TCanvas();");
          ExecPlugin("c1", nullptr, cmd.Data(), 1);

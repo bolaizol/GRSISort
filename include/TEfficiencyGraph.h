@@ -35,11 +35,15 @@ public:
 
    TEfficiencyGraph(const TEfficiencyGraph& copy);
 
+	TEfficiencyGraph& operator=(const TEfficiencyGraph&) = default; // use default to stop gcc 9.1 warning
+
 public:
    void Print(Option_t* opt = "") const override;
    void Clear(Option_t* opt = "") override;
 
-   void Scale(const Double_t& scale);
+#if ROOT_VERSION_CODE < ROOT_VERSION(6,26,0)
+	void Scale(const double& scale);
+#endif
    void SetAbsolute(const bool& flag) { fIsAbsolute = flag; }
    bool                         IsAbsolute() const { return fIsAbsolute; }
 

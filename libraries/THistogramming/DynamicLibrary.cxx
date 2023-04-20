@@ -1,7 +1,6 @@
 #include "DynamicLibrary.h"
 
 #include <cstdlib>
-
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -9,7 +8,6 @@
 #include <sstream>
 #include <string>
 #include <utility>
-
 #include <dlfcn.h>
 #include <unistd.h>
 
@@ -49,8 +47,7 @@ DynamicLibrary::DynamicLibrary(std::string libname_param, bool unique_name) : fL
    }
 
    if(fLibrary == nullptr) {
-      return;
-      // throw RuntimeFileNotFound(dlerror());
+      throw std::runtime_error(dlerror());
    }
 }
 

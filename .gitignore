@@ -1,3 +1,4 @@
+.build
 *.o
 *.so
 *.exe
@@ -13,9 +14,9 @@ htmldoc
 .grsi_history
 ./bin*
 bin
+lib
 myAnalysis
 Sandbox
-examples
 *User*
 .deps
 .nfs*
@@ -28,3 +29,8 @@ GRSIProof/*.?
 __pycache__
 grsi_logon.C
 *.pcm
+*Data
+.grsirc
+documentation
+wiki
+doxygen

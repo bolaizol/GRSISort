@@ -22,7 +22,6 @@
 #include "TRootApplication.h"
 
 #include "GRootCanvas.h"
-//#include "GRootObjectManager.h"
 
 #include "TRootBrowserLite.h"
 #include "TRootContextMenu.h"
@@ -53,7 +52,7 @@ GRootGuiFactory::GRootGuiFactory(const char* name, const char* title) : TGuiFact
 }
 
 //______________________________________________________________________________
-TApplicationImp* GRootGuiFactory::CreateApplicationImp(const char* classname, Int_t* argc, char** argv)
+TApplicationImp* GRootGuiFactory::CreateApplicationImp(const char* classname, int* argc, char** argv)
 {
    // Create a ROOT native GUI version of TApplicationImp
 
@@ -69,12 +68,9 @@ TApplicationImp* GRootGuiFactory::CreateApplicationImp(const char* classname, In
 TCanvasImp* GRootGuiFactory::CreateCanvasImp(TCanvas* c, const char* title, UInt_t width, UInt_t height)
 {
    // Create a ROOT native GUI version of TCanvasImp
-   // GRootObjectManager::Instance()->AddCanvas(c);
    // return new GRootCanvas(c, title, width, height);i
    auto* grc = new GRootCanvas(static_cast<GCanvas*>(c), title, width, height);
-   // GRootObjectManager::AddCanvas(c);
-   // c->Connect("Closed()","GRootObjectManager",this,"RemoveCanvas()");
-   // GRootObjectManager::Update();
+
    return grc;
 }
 
@@ -83,12 +79,9 @@ TCanvasImp* GRootGuiFactory::CreateCanvasImp(TCanvas* c, const char* title, Int_
                                              UInt_t height)
 {
    // Create a ROOT native GUI version of TCanvasImp
-   // GRootObjectManager::Instance()->AddCanvas(c);
    // return new GRootCanvas(c, title, x, y, width, height);
    auto* grc = new GRootCanvas(static_cast<GCanvas*>(c), title, x, y, width, height);
-   // GRootObjectManager::AddCanvas(c);
-   // c->Connect("Closed()","GRootObjectManager",this,"RemoveCanvas()");
-   // GRootObjectManager::Update();
+
    return grc;
 }
 
@@ -116,14 +109,12 @@ TBrowserImp* GRootGuiFactory::CreateBrowserImp(TBrowser* b, const char* title, U
       return new TRootBrowserLite(b, title, width, height);
    }
    if((ph != nullptr) && ph->LoadPlugin() != -1) {
-      // printf("i am here now 1.\t %s \n",browserOptions.Data());
       TBrowserImp* imp = (TBrowserImp*)ph->ExecPlugin(5, b, title, width, height, browserOptions.Data());
       if(imp != nullptr) {
 
          return imp;
       }
    }
-   printf(" and never here.\n");
    return new TRootBrowserLite(b, title, width, height);
 }
 
